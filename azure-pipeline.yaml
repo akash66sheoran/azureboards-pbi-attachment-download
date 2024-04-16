@@ -1,0 +1,53 @@
+trigger: none
+
+pool: my-agent-pool
+
+variables:
+  organization: akash66sheoran
+  project: my-project
+
+parameters:
+  - name: itemID
+    displayName: ID of pbi
+    type: number
+
+  - name: fileLocation
+    displayName: Where is the file?
+    values:
+      - Attached to pbi
+      - FTP server
+
+steps:
+- task: Bash@3
+  condition: eq('${{ parameters.fileLocation }}', 'Attached to pbi')
+  displayName: Get attachment
+  inputs:
+    targetType: 'inline'
+    script: |
+
+      sudo apt update && sudo apt install jq -y
+      
+      authHeaderValue=$(echo -n ":$(pat)" | base64)
+  
+      response=$(curl --header "Authorization: Basic $authHeaderValue" --location https://dev.azure.com/$(organization)/$(project)/_apis/wit/workitems/${{parameters.itemID}}?%24expand=all)
+  
+      fileName=$(echo $response | jq -r '.relations[0].attributes.name')
+      echo "##vso[task.setvariable variable=fileName]$fileName"
+      attachmentURL=$(echo $response | jq -r '.relations[0].url')
+      
+      IFS='/'
+      read -ra url_arr <<< "$attachmentURL"
+  
+      attachmentID=$(echo "${url_arr[-1]}")
+  
+      curl -o $fileName --header "Authorization: Basic $authHeaderValue" --location https://dev.azure.com/$(organization)/$(project)/_apis/wit/attachments/$attachmentID
+  
+      ls -lrt
+      
+      cat $fileName
+
+
+- task: Bash@3
+  inputs:
+    targetType: 'inline'
+    script: 'echo $(fileName)'
